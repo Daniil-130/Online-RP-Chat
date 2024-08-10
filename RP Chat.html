@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RP Чат с Боями</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+            padding: 20px;
+        }
+        .chat-box {
+            background-color: white;
+            border: 1px solid #ccc;
+            padding: 10px;
+            overflow-y: auto;
+            flex-grow: 1;
+            margin-bottom: 10px;
+        }
+        .message {
+            padding: 5px 10px;
+            border-bottom: 1px solid #f1f1f1;
+        }
+        .message:last-child {
+            border-bottom: none;
+        }
+        .input-container {
+            display: flex;
+        }
+        .input-container input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .input-container button {
+            padding: 10px;
+            border: none;
+            background-color: #28a745;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .input-container button:hover {
+            background-color: #218838;
+        }
+        .username-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+        .username-container input {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 10px;
+        }
+        .username-container button {
+            padding: 10px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        .username-container button:hover {
+            background-color: #0056b3;
+        }
+        #fight-button {
+            padding: 10px;
+            border: none;
+            background-color: #dc3545;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #fight-button:hover {
+            background-color: #c82333;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.4);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+        }
+        .character-list button {
+            padding: 10px;
+            margin: 5px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .character-list button:hover {
+            background-color: #0056b3;
+        }
+        #cancel-button {
+            margin-top: 20px;
+            padding: 10px;
+            border: none;
+            background-color: #6c757d;
+            color: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        #cancel-button:hover {
+            background-color: #5a6268;
+        }
+    </style>
+</head>
+<body>
+    <div id="username-container" class="username-container">
+        <input type="text" id="profile-input" placeholder="Введите профиль">
+        <input type="text" id="nickname-input" placeholder="Введите ваше имя РП">
+        <button onclick="register()">Регистрация</button>
+    </div>
+    <div id="chat-container" class="chat-container" style="display: none;">
+        <div id="chat-header">
+            <span id="username-display"></span>
+            <button onclick="renameUsername()">Переименовать</button>
+            <button id="fight-button" onclick="openFightModal()">Бой</button>
+        </div>
+        <div id="chat-box" class="chat-box">
+            <!-- Сообщения будут добавляться здесь -->
+        </div>
+        <div class="input-container">
+            <input type="text" id="message-input" placeholder="Введите сообщение">
+            <button onclick="sendMessage()">Отправить</button>
+        </div>
+    </div>
+
+    <div id="fight-modal" class="modal">
+        <div class="modal-content">
+            <h2>Выберите персонажа</h2>
+            <div class="character-list">
+                <button onclick="selectCharacter('Виндовс мен')">Виндовс мен</button>
+                <button onclick="selectCharacter('Симбиот')">Симбиот</button>
+                <!-- Другие кнопки для персонажей -->
+            </div>
+            <div id="player2-wait" style="display: none;">Ожидание второго игрока...</div>
+            <button id="cancel-button" onclick="cancelFight()">Отмена</button>
+        </div>
+    </div>
+
+    <script>
+        let profile = '';
+        let nickname = '';
+        let selectedCharacter = '';
+        const ws = new WebSocket('ws://localhost:8080');
+
+        ws.onmessage = function(event) {
+            const message = JSON.parse(event.data);
+            if (message.type === 'message') {
+                const chatBox = document.getElementById('chat-box');
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('message');
+                messageElement.textContent = message.text;
+                chatBox.appendChild(messageElement);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            } else if (message.type === 'register') {
+                if (message.success) {
+                    profile = message.profile;
+                    window.history.pushState({}, '', `/${profile}`);
+                    document.getElementById('username-container').style.display = 'none';
+                    document.getElementById('chat-container').style.display = 'flex';
+                    document.getElementById('username-display').textContent = `Ваш ник: ${nickname}`;
+                } else {
+                    alert('Ошибка регистрации');
+                }
+            } else if (message.type === 'history') {
+                message.messages.forEach(function(msg) {
+                    const chatBox = document.getElementById('chat-box');
+                    const messageElement = document.createElement('div');
+                    messageElement.classList.add('message');
+                    messageElement.textContent = msg;
+                    chatBox.appendChild(messageElement);
+                });
+            } else if (message.type === 'usersConnected') {
+                alert(`Пользователи ${message.profile1} и ${message.profile2} подключены!`);
+                closeFightModal();
+            } else if (message.type === 'waiting') {
+                document.getElementById('player2-wait').style.display = 'block';
+            }
+        };
+
+        function register() {
+            const profileInput = document.getElementById('profile-input').value.trim();
+            const nicknameInput = document.getElementById('nickname-input').value.trim();
+
+            if (profileInput !== '' && nicknameInput !== '') {
+                profile = profileInput;
+                nickname = nicknameInput;
+                ws.send(JSON.stringify({ type: 'register', profile, nickname }));
+            }
+        }
+
+        function renameUsername() {
+            document.getElementById('username-container').style.display = 'flex';
+            document.getElementById('chat-container').style.display = 'none';
+        }
+
+        function sendMessage() {
+            const messageInput = document.getElementById('message-input');
+            const messageText = messageInput.value.trim();
+
+            if (messageText !== '') {
+                const fullMessage = `${nickname}: ${messageText}`;
+                ws.send(JSON.stringify({ type: 'message', text: fullMessage }));
+
+                const chatBox = document.getElementById('chat-box');
+                const messageElement = document.createElement('div');
+                messageElement.classList.add('message');
+                messageElement.textContent = fullMessage;
+                chatBox.appendChild(messageElement);
+                messageInput.value = '';
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }
+        }
+
+        document.getElementById('message-input').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        });
+
+        function openFightModal() {
+            document.getElementById('fight-modal').style.display = 'flex';
+        }
+
+        function closeFightModal() {
+            document.getElementById('fight-modal').style.display = 'none';
+            document.getElementById('player2-wait').style.display = 'none';
+        }
+
+        function selectCharacter(character) {
+            selectedCharacter = character;
+            ws.send(JSON.stringify({ type: 'fightRequest', player1: nickname, character: selectedCharacter }));
+            document.getElementById('player2-wait').style.display = 'block';
+        }
+
+        function cancelFight() {
+            closeFightModal();
+        }
+
+        // Функция для подключения двух пользователей
+        function connectUsers(profile1, profile2) {
+            ws.send(JSON.stringify({ type: 'connectUsers', profile1, profile2 }));
+        }
+    </script>
+</body>
+</html>
